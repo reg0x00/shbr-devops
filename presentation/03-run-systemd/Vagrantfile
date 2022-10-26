@@ -1,6 +1,7 @@
 Vagrant.configure("2") do |config|
     config.vm.box_check_update = false
-    config.vbguest.installer_options = { allow_kernel_upgrade: true } # vagrant plugin install vagrant-vbguest
+    config.vbguest.auto_update = !Vagrant.has_plugin?("vagrant-vbguest")
+    config.vbguest.installer_options = { allow_kernel_upgrade: Vagrant.has_plugin?("vagrant-vbguest") } # vagrant plugin install vagrant-vbguest
 
     config.vm.synced_folder ".", "/vagrant", disabled: true
     config.vm.synced_folder "../../projects/python", "/python"
@@ -8,7 +9,7 @@ Vagrant.configure("2") do |config|
     config.vm.synced_folder "./shbr-echo", "/shbr-echo"
 
     config.vm.define "03-run-systemd" do |node|
-      node.vm.box = "ubuntu/focal64"
+      node.vm.box = "ubuntu/jammy64"
       node.vm.hostname = "03-run-systemd"
       node.vagrant.host = "03-run-systemd"
 
@@ -16,20 +17,63 @@ Vagrant.configure("2") do |config|
 
       node.vm.provider "virtualbox" do |v|
         v.name = "03-run-systemd"
+        v.memory = 6144
+        v.cpus = 5
       end
 
       node.vm.provision "shell" do |s|
         s.inline = <<-SHELL
           set -e
           apt-get update
-          apt-get install -y software-properties-common debhelper build-essential
+          apt-get install -y software-properties-common debhelper build-essential fish
 
           add-apt-repository ppa:linuxuprising/java
           apt-get update
           /bin/echo debconf shared/accepted-oracle-license-v1-3 select true | /usr/bin/debconf-set-selections
           /bin/echo debconf shared/accepted-oracle-license-v1-3 seen true | /usr/bin/debconf-set-selections
-          DEBIAN_FRONTEND="noninteractive" apt-get install -y oracle-java17-installer python3 python3-pip
+          DEBIAN_FRONTEND="noninteractive" apt-get install -y oracle-java17-installer python3 python3-pip git
+
+          DEBIAN_FRONTEND="noninteractive" apt-get install -y python3 python3-pip python3-dev virtualenv
+          DEBIAN_FRONTEND="noninteractive" apt-get install -y  cmake \
+                                                        libboost1.74-dev \
+                                                        libboost-program-options1.74-dev \
+                                                        libboost-filesystem1.74-dev \
+                                                        libboost-locale1.74-dev \
+                                                        libboost-regex1.74-dev \
+                                                        libboost-iostreams1.74-dev \
+                                                        libev-dev \
+                                                        zlib1g-dev \
+                                                        libcurl4-openssl-dev \
+                                                        libcrypto++-dev \
+                                                        libyaml-cpp-dev \
+                                                        libssl-dev \
+                                                        libfmt-dev \
+                                                        libcctz-dev \
+                                                        libhttp-parser-dev \
+                                                        libjemalloc-dev \
+                                                        python3-jinja2 \
+                                                        python3-voluptuous \
+                                                        libc-ares-dev \
+                                                        libspdlog-dev \
+                                                        libbenchmark-dev \
+                                                        libgmock-dev \
+                                                        libgtest-dev \
+                                                        ccache \
+                                                        git
+          pip3 install pyyaml
+
           pip3 install aiohttp
+
+          if [ ! -d /cpp ]; then
+            git clone https://github.com/grigory51/shbr-devops-cpp.git /cpp && cd /cpp && git submodule update --init
+          fi
+          chown -R vagrant:vagrant /cpp
+
+          chsh -s /usr/bin/fish
+          sed -i  's/auth       required   pam_shells.so/auth       sufficient   pam_shells.so/g' /etc/pam.d/chsh
+          su -c '/usr/bin/chsh -s /usr/bin/fish' vagrant
+
+          mv ~/.bash_logout ~/.bash_logout.bak 2>/dev/null || true
         SHELL
         s.privileged = true
       end
